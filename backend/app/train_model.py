@@ -2,7 +2,7 @@ import os
 import sys
 import joblib
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import (
@@ -182,19 +182,40 @@ def train():
     )
 
     print(
-        "\nTraining Random Forest classifier..."
+        "\nTraining XGBoost classifier..."
     )
 
-    model = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=8,
+    from sklearn.utils.class_weight import (
+        compute_sample_weight,
+    )
+
+    sample_weights = compute_sample_weight(
         class_weight="balanced",
+        y=labels_train,
+    )
+
+    num_classes = len(
+        label_encoder.classes_
+    )
+
+    eval_metric = (
+        "logloss"
+        if num_classes == 2
+        else "mlogloss"
+    )
+
+    model = XGBClassifier(
+        n_estimators=200,
+        max_depth=6,
+        learning_rate=0.1,
+        eval_metric=eval_metric,
         random_state=42,
     )
 
     model.fit(
         features_train,
         labels_train,
+        sample_weight=sample_weights,
     )
 
     predictions = model.predict(

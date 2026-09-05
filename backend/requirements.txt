@@ -6,3 +6,4 @@ python-dotenv
 shapely
 scikit-learn
 joblib
+xgboost
