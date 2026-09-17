@@ -7,15 +7,35 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
 *.local
+
+# Environment Variables and Secrets
+.env
+.env.*
+*.env
+!.env.example
+!backend/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -23,14 +43,11 @@ dist-ssr
 *.sln
 *.sw?
 
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-.env
-*.env
-
-# Local database
+# Local database and caches
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 backend/app/thermointel.db

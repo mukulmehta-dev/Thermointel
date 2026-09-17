@@ -123,7 +123,7 @@ type PersistentResponse = {
   retrieved_at: string;
 };
 
-const API_URL = "http://127.0.0.1:8001";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
 
 function severityClass(severity: Severity) {
   return severity.toLowerCase();
@@ -526,15 +526,6 @@ function App() {
     );
   }, [events]);
 
-  const highestRiskEvent = useMemo(() => {
-    if (!events.length) return null;
-
-    return [...events].sort(
-      (a, b) =>
-        (b.intelligence_score || 0) -
-        (a.intelligence_score || 0)
-    )[0];
-  }, [events]);
 
   const filteredEvents = useMemo(() => {
     const query = searchTerm
@@ -707,10 +698,18 @@ function App() {
           className="workstation-map"
         >
 
+          
           <TileLayer
             attribution="&copy; OpenStreetMap contributors &copy; CARTO"
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            url={
+              import.meta.env.VITE_CARTO_API_KEY
+                ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${import.meta.env.VITE_CARTO_API_KEY}`
+                : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            }
           />
+          
+          
+          
 
           {filteredEvents.map((event) => {
 

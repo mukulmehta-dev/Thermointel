@@ -28,6 +28,9 @@ BASE_DIR = os.path.dirname(
 # ENVIRONMENT
 # =========================================================
 
+backend_env = os.path.join(os.path.dirname(BASE_DIR), ".env")
+if os.path.exists(backend_env):
+    load_dotenv(backend_env)
 load_dotenv()
 
 FIRMS_MAP_KEY = os.getenv("FIRMS_MAP_KEY")
