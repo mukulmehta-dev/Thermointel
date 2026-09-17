@@ -198,6 +198,30 @@ FIRMS_MAP_KEY=your_nasa_firms_map_key_here
 
 ---
 
+### 🚀 Deploying Frontend to Vercel
+
+The repository includes a ready-to-use [`vercel.json`](file:///vercel.json) pre-configured for Vite:
+
+1. **Via Vercel CLI (Manual Deployment)**:
+   ```bash
+   npx vercel
+   # For production release:
+   npx vercel --prod
+   ```
+
+2. **Via Vercel Web Dashboard**:
+   - Import your GitHub repository (`mukulmehta-dev/Thermointel`).
+   - Framework preset will automatically be detected as **Vite**.
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+
+3. **Configure Environment Variables in Vercel**:
+   Add the following in your Vercel Project Settings -> **Environment Variables**:
+   - `VITE_API_URL`: URL of your deployed FastAPI backend (e.g. `https://your-backend.onrender.com`)
+   - `VITE_CARTO_API_KEY`: *(Optional)* Your CARTO basemaps key
+
+---
+
 ## 📡 API Reference
 
 The FastAPI backend provides the following REST API endpoints:
