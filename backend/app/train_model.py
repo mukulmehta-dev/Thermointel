@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import joblib
 import pandas as pd
 from xgboost import XGBClassifier
@@ -35,9 +36,19 @@ MODEL_PATH = os.path.join(
     "thermal_classifier.joblib",
 )
 
+JSON_MODEL_PATH = os.path.join(
+    MODELS_DIR,
+    "thermal_classifier.json",
+)
+
 LABEL_ENCODER_PATH = os.path.join(
     MODELS_DIR,
     "label_encoder.joblib",
+)
+
+CLASSES_PATH = os.path.join(
+    MODELS_DIR,
+    "classes.json",
 )
 
 MINIMUM_ROWS_REQUIRED = 30
@@ -275,10 +286,20 @@ def train():
         MODEL_PATH,
     )
 
+    try:
+        model.get_booster().save_model(
+            JSON_MODEL_PATH
+        )
+    except Exception as error:
+        print(f"Warning: Failed to save booster JSON: {error}")
+
     joblib.dump(
         label_encoder,
         LABEL_ENCODER_PATH,
     )
+
+    with open(CLASSES_PATH, "w", encoding="utf-8") as file:
+        json.dump(list(label_encoder.classes_), file, indent=2)
 
     print(
         f"\nModel saved to: {MODEL_PATH}"
@@ -287,6 +308,11 @@ def train():
     print(
         "Label encoder saved to: "
         f"{LABEL_ENCODER_PATH}"
+    )
+
+    print(
+        "Classes JSON saved to: "
+        f"{CLASSES_PATH}"
     )
 
     print(

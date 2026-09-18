@@ -1,7 +1,14 @@
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import io
 import json
 import math
+import gc
 import asyncio
 import concurrent.futures
 import joblib
@@ -14,6 +21,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from shapely.geometry import Point, shape
 from shapely.ops import unary_union
+from shapely.prepared import prep
 
 from . import db
 from . import ml_features
@@ -79,35 +87,82 @@ MODEL_PATH = os.path.join(
     "thermal_classifier.joblib",
 )
 
+BOOSTER_MODEL_PATH = os.path.join(
+    MODELS_DIR,
+    "thermal_classifier.json",
+)
+
 LABEL_ENCODER_PATH = os.path.join(
     MODELS_DIR,
     "label_encoder.joblib",
 )
 
+CLASSES_PATH = os.path.join(
+    MODELS_DIR,
+    "classes.json",
+)
+
 ML_MODEL = None
-ML_LABEL_ENCODER = None
+ML_CLASSES = None
 
 
 def load_ml_model():
-    global ML_MODEL, ML_LABEL_ENCODER
+    global ML_MODEL, ML_CLASSES
 
-    if os.path.exists(
-        MODEL_PATH
-    ) and os.path.exists(
-        LABEL_ENCODER_PATH
-    ):
+    # Prefer native XGBoost booster JSON (runs with zero scikit-learn dependency)
+    if os.path.exists(BOOSTER_MODEL_PATH):
+        try:
+            import xgboost as xgb
+            booster = xgb.Booster()
+            booster.load_model(BOOSTER_MODEL_PATH)
+            ML_MODEL = booster
+
+            if os.path.exists(CLASSES_PATH):
+                with open(CLASSES_PATH, "r", encoding="utf-8") as file:
+                    ML_CLASSES = json.load(file)
+            else:
+                ML_CLASSES = [
+                    "Industrial Fire Candidate",
+                    "Potential Industrial Thermal Source",
+                    "Thermal Anomaly",
+                ]
+
+            print(
+                "Trained ML booster model "
+                "loaded successfully (native JSON)."
+            )
+            return
+
+        except Exception as error:
+            print(
+                "Failed to load native booster model: "
+                f"{error}. Falling back to joblib model."
+            )
+
+    if os.path.exists(MODEL_PATH):
         try:
             ML_MODEL = joblib.load(
                 MODEL_PATH
             )
 
-            ML_LABEL_ENCODER = joblib.load(
-                LABEL_ENCODER_PATH
-            )
+            if os.path.exists(CLASSES_PATH):
+                with open(CLASSES_PATH, "r", encoding="utf-8") as file:
+                    ML_CLASSES = json.load(file)
+            elif os.path.exists(LABEL_ENCODER_PATH):
+                label_encoder = joblib.load(
+                    LABEL_ENCODER_PATH
+                )
+                ML_CLASSES = list(label_encoder.classes_)
+            else:
+                ML_CLASSES = [
+                    "Industrial Fire Candidate",
+                    "Potential Industrial Thermal Source",
+                    "Thermal Anomaly",
+                ]
 
             print(
                 "Trained ML classifier "
-                "loaded successfully."
+                "loaded successfully (joblib)."
             )
 
         except Exception as error:
@@ -117,7 +172,7 @@ def load_ml_model():
             )
 
             ML_MODEL = None
-            ML_LABEL_ENCODER = None
+            ML_CLASSES = None
 
     else:
         print(
@@ -132,7 +187,7 @@ load_ml_model()
 
 
 def predict_ml_classification(event):
-    if ML_MODEL is None or ML_LABEL_ENCODER is None:
+    if ML_MODEL is None or not ML_CLASSES:
         return None, None
 
     try:
@@ -160,19 +215,25 @@ def predict_ml_classification(event):
             row
         )
 
-        prediction_index = ML_MODEL.predict(
-            features
-        )[0]
-
-        probabilities = ML_MODEL.predict_proba(
-            features
-        )[0]
-
-        predicted_label = (
-            ML_LABEL_ENCODER.inverse_transform(
-                [prediction_index]
+        if hasattr(ML_MODEL, "predict_proba"):
+            prediction_index = int(
+                ML_MODEL.predict(
+                    features
+                )[0]
+            )
+            probabilities = ML_MODEL.predict_proba(
+                features
             )[0]
-        )
+        else:
+            import xgboost as xgb
+            dmat = xgb.DMatrix(features)
+            probabilities = ML_MODEL.predict(dmat)[0]
+            prediction_index = int(probabilities.argmax())
+
+        if 0 <= prediction_index < len(ML_CLASSES):
+            predicted_label = ML_CLASSES[prediction_index]
+        else:
+            predicted_label = "Thermal Anomaly"
 
         confidence = round(
             float(
@@ -307,15 +368,24 @@ def load_india_geometry():
                         shape(geometry)
                     )
 
+            del geojson
+            gc.collect()
+
             if not geometries:
                 raise ValueError(
                     "FeatureCollection contains no geometries."
                 )
 
+            if len(geometries) == 1:
+                return geometries[0]
+
             return unary_union(geometries)
 
         if geojson_type == "Feature":
             geometry = geojson.get("geometry")
+
+            del geojson
+            gc.collect()
 
             if not geometry:
                 raise ValueError(
@@ -328,7 +398,10 @@ def load_india_geometry():
             "Polygon",
             "MultiPolygon",
         }:
-            return shape(geojson)
+            geom = shape(geojson)
+            del geojson
+            gc.collect()
+            return geom
 
         raise ValueError(
             f"Unsupported GeoJSON type: {geojson_type}"
@@ -342,6 +415,7 @@ def load_india_geometry():
 
 
 INDIA_GEOMETRY = load_india_geometry()
+PREPARED_INDIA_GEOMETRY = prep(INDIA_GEOMETRY)
 
 
 def is_inside_india(latitude, longitude):
@@ -351,8 +425,8 @@ def is_inside_india(latitude, longitude):
     )
 
     return (
-        INDIA_GEOMETRY.contains(point)
-        or INDIA_GEOMETRY.touches(point)
+        PREPARED_INDIA_GEOMETRY.contains(point)
+        or PREPARED_INDIA_GEOMETRY.touches(point)
     )
 
 
@@ -420,6 +494,9 @@ def load_local_landcover_layer(
 
             except Exception:
                 continue
+
+        del geojson
+        gc.collect()
 
         if not geometries:
             print(
